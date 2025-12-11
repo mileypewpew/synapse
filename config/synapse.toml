@@ -1,0 +1,48 @@
+# Synapse Event Engine Configuration
+# Environment variables can be substituted using ${VAR_NAME} syntax
+
+[server]
+port = 3000
+api_key = "${SYNAPSE_API_KEY}"
+
+[redis]
+url = "${REDIS_URL}"
+
+[worker]
+name = "${SYNAPSE_WORKER_NAME}"
+consumer_group = "synapse_workers"
+
+# Event routing rules
+# Format: "pattern" = ["effect1", "effect2"]
+# Patterns:
+#   - Exact match: "user.created"
+#   - Wildcard suffix: "game.*" matches game.started, game.ended, etc.
+#   - Catch-all: "*" matches all events
+[routes]
+"user.created" = ["log:user"]
+"user.*" = ["log:user"]
+"game.*" = ["log:game", "webhook:discord"]
+"player.*" = ["log:game"]
+"system.alert" = ["log:system", "webhook:discord"]
+"*" = ["log:default"]
+
+# Effect configurations
+# Format: [effects.<type>.<name>]
+
+[effects.log.user]
+prefix = "user"
+
+[effects.log.game]
+prefix = "game"
+
+[effects.log.system]
+prefix = "system"
+
+[effects.log.default]
+prefix = "unhandled"
+
+[effects.webhook.discord]
+url = "${DISCORD_WEBHOOK_URL}"
+timeout_ms = 10000
+retries = 2
+format = "discord"
