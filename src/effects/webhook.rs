@@ -32,13 +32,13 @@ const DEFAULT_RETRIES: u32 = 1;
 /// Discord embed colors by event type prefix
 fn get_discord_color(event_type: &str) -> u32 {
     match event_type.split('.').next().unwrap_or("") {
-        "game" => 0x57F287,    // Green - positive/game events
-        "player" => 0x5865F2,  // Blurple - player events
-        "user" => 0x3498DB,    // Blue - user events
-        "system" => 0xED4245,  // Red - system/alert events
-        "error" => 0xED4245,   // Red - errors
-        "warn" => 0xFEE75C,    // Yellow - warnings
-        _ => 0x99AAB5,         // Gray - default
+        "game" => 0x57F287,   // Green - positive/game events
+        "player" => 0x5865F2, // Blurple - player events
+        "user" => 0x3498DB,   // Blue - user events
+        "system" => 0xED4245, // Red - system/alert events
+        "error" => 0xED4245,  // Red - errors
+        "warn" => 0xFEE75C,   // Yellow - warnings
+        _ => 0x99AAB5,        // Gray - default
     }
 }
 
@@ -307,10 +307,7 @@ impl WebhookEffect {
                             attempt = attempts,
                             "Webhook returned server error, will retry"
                         );
-                        last_error = Some(EffectError::Failed(format!(
-                            "Server error: {}",
-                            status
-                        )));
+                        last_error = Some(EffectError::Failed(format!("Server error: {}", status)));
                     }
                 }
                 Err(e) => {
@@ -399,8 +396,7 @@ mod tests {
 
     #[test]
     fn test_webhook_discord_format() {
-        let effect = WebhookEffect::new("https://discord.com/webhook")
-            .with_discord_format();
+        let effect = WebhookEffect::new("https://discord.com/webhook").with_discord_format();
 
         assert!(effect.discord_format);
     }
@@ -422,8 +418,7 @@ mod tests {
 
     #[test]
     fn test_discord_payload_structure() {
-        let effect = WebhookEffect::new("https://discord.com/webhook")
-            .with_discord_format();
+        let effect = WebhookEffect::new("https://discord.com/webhook").with_discord_format();
 
         let event = Event {
             source: "test".to_string(),

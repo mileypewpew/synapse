@@ -198,8 +198,7 @@ mod tests {
         assert_eq!(result.message, "Done");
         assert!(result.metadata.is_none());
 
-        let result_with_meta =
-            EffectResult::with_metadata("test", "Done", json!({"count": 42}));
+        let result_with_meta = EffectResult::with_metadata("test", "Done", json!({"count": 42}));
         assert!(result_with_meta.metadata.is_some());
     }
 }

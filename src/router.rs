@@ -180,7 +180,10 @@ impl Router {
 
         if is_wildcard_pattern(pattern) {
             // Find existing pattern entry or create new one
-            if let Some(entry) = self.pattern_handlers.iter_mut().find(|e| e.pattern == pattern)
+            if let Some(entry) = self
+                .pattern_handlers
+                .iter_mut()
+                .find(|e| e.pattern == pattern)
             {
                 entry.effects.push(effect);
             } else {
@@ -594,7 +597,9 @@ mod tests {
         assert!(result.is_success());
         // Both exact and wildcard should match
         assert_eq!(result.effects_executed, 2);
-        assert!(result.matched_patterns.contains(&"game.started".to_string()));
+        assert!(result
+            .matched_patterns
+            .contains(&"game.started".to_string()));
         assert!(result.matched_patterns.contains(&"game.*".to_string()));
     }
 

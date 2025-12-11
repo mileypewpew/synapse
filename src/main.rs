@@ -1,25 +1,27 @@
 use axum::{
-    extract::{State, Request},
-    http::{StatusCode, header, HeaderMap},
+    extract::{Request, State},
+    http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{Json, Response},
     routing::{get, post},
     Router,
 };
 use chrono::Utc;
-use deadpool_redis::{Config, Pool, Runtime};
 use deadpool_redis::redis::cmd;
+use deadpool_redis::{Config, Pool, Runtime};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
-use tracing::{info, error, debug, warn};
+use tracing::{debug, error, info, warn};
 
 // Import from the synapse library
+use synapse::dlq::DeadLetterQueue;
 use synapse::event::Event;
+use synapse::shutdown::ShutdownSignal;
 use synapse::EVENT_STREAM_NAME;
 
 /// Application metrics
@@ -50,6 +52,7 @@ struct AppState {
     redis_pool: Pool,
     api_key: String,
     metrics: Arc<Metrics>,
+    dlq: DeadLetterQueue,
 }
 
 /// Response returned when an event is successfully accepted.
@@ -79,12 +82,18 @@ async fn main() {
 
     // 3. Setup Redis Pool
     let cfg = Config::from_url(redis_url);
-    let pool = cfg.create_pool(Some(Runtime::Tokio1)).expect("Failed to create Redis pool");
+    let pool = cfg
+        .create_pool(Some(Runtime::Tokio1))
+        .expect("Failed to create Redis pool");
+
+    // Create DLQ instance
+    let dlq = DeadLetterQueue::new(pool.clone());
 
     let app_state = Arc::new(AppState {
         redis_pool: pool,
         api_key,
         metrics: Arc::new(Metrics::new()),
+        dlq,
     });
 
     // 4. Build Router with Auth Middleware
@@ -92,17 +101,34 @@ async fn main() {
         .route("/health", get(health_check))
         .route("/metrics", get(get_metrics))
         .route("/api/v1/events", post(emit_event))
-        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware))
+        .route("/api/v1/dlq", get(list_dlq))
+        .route("/api/v1/dlq/{id}", get(get_dlq_entry))
+        .route("/api/v1/dlq/{id}", axum::routing::delete(delete_dlq_entry))
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            auth_middleware,
+        ))
         .with_state(app_state);
 
-    // 5. Start Server
+    // 5. Start Server with Graceful Shutdown
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr_str = format!("0.0.0.0:{}", port);
     let addr: SocketAddr = addr_str.parse().expect("Invalid address");
 
+    // Setup shutdown signal
+    let shutdown = ShutdownSignal::new();
+
     info!("Synapse Server listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+
+    // Serve with graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            shutdown.wait().await;
+            info!("Server shutdown complete");
+        })
+        .await
+        .unwrap();
 }
 
 async fn auth_middleware(
@@ -116,7 +142,8 @@ async fn auth_middleware(
         return Ok(next.run(req).await);
     }
 
-    let auth_header = req.headers()
+    let auth_header = req
+        .headers()
         .get(header::AUTHORIZATION)
         .and_then(|header| header.to_str().ok());
 
@@ -163,7 +190,12 @@ async fn get_metrics(State(state): State<Arc<AppState>>) -> Json<Value> {
     } else if uptime < 3600 {
         format!("{}m {}s", uptime / 60, uptime % 60)
     } else {
-        format!("{}h {}m {}s", uptime / 3600, (uptime % 3600) / 60, uptime % 60)
+        format!(
+            "{}h {}m {}s",
+            uptime / 3600,
+            (uptime % 3600) / 60,
+            uptime % 60
+        )
     };
 
     Json(json!({
@@ -252,4 +284,88 @@ async fn emit_event(
             correlation_id,
         }),
     ))
+}
+
+/// DLQ query parameters for pagination
+#[derive(Debug, Deserialize)]
+struct DlqQuery {
+    #[serde(default = "default_dlq_limit")]
+    limit: usize,
+    #[serde(default)]
+    offset: usize,
+}
+
+fn default_dlq_limit() -> usize {
+    50
+}
+
+/// List entries in the Dead Letter Queue
+async fn list_dlq(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(query): axum::extract::Query<DlqQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    let count = state.dlq.count().await.map_err(|e| {
+        error!(error = %e, "Failed to get DLQ count");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let entries = state
+        .dlq
+        .list(query.limit, query.offset)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to list DLQ entries");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(json!({
+        "total": count,
+        "limit": query.limit,
+        "offset": query.offset,
+        "entries": entries.into_iter().map(|(id, data)| {
+            json!({
+                "id": id,
+                "data": data
+            })
+        }).collect::<Vec<_>>()
+    })))
+}
+
+/// Get a specific DLQ entry by ID
+async fn get_dlq_entry(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    let entry = state.dlq.get(&id).await.map_err(|e| {
+        error!(error = %e, id = %id, "Failed to get DLQ entry");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    match entry {
+        Some(data) => Ok(Json(json!({
+            "id": id,
+            "data": data
+        }))),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+/// Delete (remove) a DLQ entry by ID
+async fn delete_dlq_entry(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    let removed = state.dlq.remove(&id).await.map_err(|e| {
+        error!(error = %e, id = %id, "Failed to remove DLQ entry");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    if removed {
+        Ok(Json(json!({
+            "id": id,
+            "status": "removed"
+        })))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
