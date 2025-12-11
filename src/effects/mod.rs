@@ -30,6 +30,7 @@
 //! ```
 
 pub mod log;
+pub mod wasdfx;
 pub mod webhook;
 
 use crate::event::Event;
@@ -40,6 +41,7 @@ use thiserror::Error;
 
 // Re-export built-in effects
 pub use log::LogEffect;
+pub use wasdfx::WasdfxEffect;
 pub use webhook::WebhookEffect;
 
 /// Errors that can occur during effect execution.

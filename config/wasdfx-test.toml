@@ -1,0 +1,36 @@
+# Synapse -> WASDFX Integration Test Config
+
+[server]
+port = 3000
+api_key = "dev-key"
+
+[redis]
+url = "redis://localhost:6380"
+
+[worker]
+name = "synapse-wasdfx-test"
+consumer_group = "synapse_workers"
+
+# Route game events to WASDFX activity feed
+[routes]
+"game.*" = ["log:game", "wasdfx:feed"]
+"player.*" = ["log:game", "wasdfx:feed"]
+"system.*" = ["log:system"]
+"*" = ["log:default"]
+
+# Effect configurations
+[effects.log.game]
+prefix = "game"
+
+[effects.log.system]
+prefix = "system"
+
+[effects.log.default]
+prefix = "unhandled"
+
+# WASDFX Activity Feed effect
+[effects.wasdfx.feed]
+url = "http://localhost:4000/api/v1/events/emit"
+api_key = "sk_test_dev_key"
+server_id = "cmi55214n0000oykqes3x5u27"
+timeout_ms = 5000

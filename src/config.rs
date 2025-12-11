@@ -134,6 +134,9 @@ pub struct EffectsConfig {
 
     #[serde(default)]
     pub webhook: HashMap<String, WebhookEffectConfig>,
+
+    #[serde(default)]
+    pub wasdfx: HashMap<String, WasdfxEffectConfig>,
 }
 
 /// Log effect configuration
@@ -175,13 +178,28 @@ fn default_format() -> String {
     "json".to_string()
 }
 
+/// WASDFX Activity Feed effect configuration
+#[derive(Debug, Deserialize, Clone)]
+pub struct WasdfxEffectConfig {
+    pub url: String,
+
+    #[serde(default)]
+    pub api_key: String,
+
+    #[serde(default)]
+    pub server_id: Option<String>,
+
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
 impl SynapseConfig {
     /// Build a Router from the configuration.
     ///
     /// Creates effects based on the effects config and registers them
     /// for the patterns defined in routes.
     pub fn build_router(&self) -> crate::Router {
-        use crate::effects::{LogEffect, WebhookEffect};
+        use crate::effects::{LogEffect, WasdfxEffect, WebhookEffect};
         use std::sync::Arc;
         use std::time::Duration;
         use tracing::warn;
@@ -192,6 +210,8 @@ impl SynapseConfig {
         let mut log_effects: std::collections::HashMap<String, Arc<dyn crate::Effect>> =
             std::collections::HashMap::new();
         let mut webhook_effects: std::collections::HashMap<String, Arc<dyn crate::Effect>> =
+            std::collections::HashMap::new();
+        let mut wasdfx_effects: std::collections::HashMap<String, Arc<dyn crate::Effect>> =
             std::collections::HashMap::new();
 
         // Create log effects
@@ -226,6 +246,29 @@ impl SynapseConfig {
             webhook_effects.insert(name.clone(), Arc::new(effect));
         }
 
+        // Create wasdfx effects
+        for (name, config) in &self.effects.wasdfx {
+            // Skip wasdfx with unsubstituted env vars
+            if config.url.contains("${") {
+                warn!(
+                    wasdfx = %name,
+                    "Skipping wasdfx with unsubstituted URL: {}",
+                    config.url
+                );
+                continue;
+            }
+
+            let mut effect = WasdfxEffect::new(&config.url)
+                .with_timeout(Duration::from_millis(config.timeout_ms))
+                .with_api_key(&config.api_key);
+
+            if let Some(ref server_id) = config.server_id {
+                effect = effect.with_server_id(server_id);
+            }
+
+            wasdfx_effects.insert(name.clone(), Arc::new(effect));
+        }
+
         // Register routes
         for (pattern, effect_refs) in &self.routes {
             for effect_ref in effect_refs {
@@ -251,6 +294,18 @@ impl SynapseConfig {
                                     pattern = %pattern,
                                     effect = %effect_ref,
                                     "Webhook effect '{}' not found in config",
+                                    name
+                                );
+                            }
+                        }
+                        "wasdfx" => {
+                            if let Some(effect) = wasdfx_effects.get(name) {
+                                router.on(pattern, effect.clone());
+                            } else {
+                                warn!(
+                                    pattern = %pattern,
+                                    effect = %effect_ref,
+                                    "WASDFX effect '{}' not found in config",
                                     name
                                 );
                             }
@@ -318,6 +373,7 @@ impl SynapseConfig {
         info!(
             routes = config.routes.len(),
             webhook_effects = config.effects.webhook.len(),
+            wasdfx_effects = config.effects.wasdfx.len(),
             log_effects = config.effects.log.len(),
             "Configuration loaded"
         );
@@ -384,6 +440,7 @@ impl SynapseConfig {
             match effect_type {
                 "log" => self.effects.log.contains_key(name),
                 "webhook" => self.effects.webhook.contains_key(name),
+                "wasdfx" => self.effects.wasdfx.contains_key(name),
                 _ => false,
             }
         } else {
