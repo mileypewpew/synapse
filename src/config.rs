@@ -41,7 +41,7 @@ pub enum ConfigError {
 }
 
 /// Root configuration structure
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct SynapseConfig {
     #[serde(default)]
     pub server: ServerConfig,
@@ -287,8 +287,8 @@ impl SynapseConfig {
 
     /// Load configuration from the default path or SYNAPSE_CONFIG env var.
     pub fn load() -> Result<Self, ConfigError> {
-        let config_path = env::var("SYNAPSE_CONFIG")
-            .unwrap_or_else(|_| "config/synapse.toml".to_string());
+        let config_path =
+            env::var("SYNAPSE_CONFIG").unwrap_or_else(|_| "config/synapse.toml".to_string());
 
         Self::load_from(&config_path)
     }
@@ -395,18 +395,6 @@ impl SynapseConfig {
     /// Get all route patterns
     pub fn route_patterns(&self) -> Vec<&str> {
         self.routes.keys().map(|s| s.as_str()).collect()
-    }
-}
-
-impl Default for SynapseConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            redis: RedisConfig::default(),
-            worker: WorkerConfig::default(),
-            routes: HashMap::new(),
-            effects: EffectsConfig::default(),
-        }
     }
 }
 

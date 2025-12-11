@@ -145,7 +145,7 @@ mod tests {
         let json_str = serde_json::to_string(&event).unwrap();
         assert!(json_str.contains("minecraft"));
         assert!(json_str.contains("eventType")); // camelCase in JSON
-        // timestamp and correlationId should be omitted when None
+                                                 // timestamp and correlationId should be omitted when None
         assert!(!json_str.contains("timestamp"));
         assert!(!json_str.contains("correlationId"));
     }
