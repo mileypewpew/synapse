@@ -22,50 +22,53 @@ use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
 // Import from the synapse library
+use synapse::config::SynapseConfig;
 use synapse::effects::LogEffect;
 use synapse::event::Event;
 use synapse::router::Router;
 use synapse::{DEFAULT_CONSUMER_GROUP, EVENT_STREAM_NAME};
 
-/// Build the router with configured effect handlers.
-///
-/// This is where you register effects for different event types.
-/// In a production system, this could be driven by configuration.
+/// Build the router from configuration file or use defaults.
 fn build_router() -> Router {
-    let mut router = Router::new();
+    // Try to load config file
+    match SynapseConfig::load() {
+        Ok(config) => {
+            let router = config.build_router();
+            info!(
+                handler_count = router.handler_count(),
+                event_types = ?router.event_types(),
+                "Router configured from config file"
+            );
+            router
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to load config, using defaults");
+            build_default_router()
+        }
+    }
+}
 
-    // Register handlers for known event types
-    // Each event type can have multiple effects
+/// Build a default router when no config is available.
+fn build_default_router() -> Router {
+    let mut router = Router::new();
 
     // Default: Log all events that don't have specific handlers
     router.set_default(Arc::new(LogEffect::with_prefix("unhandled")));
 
     // User events
-    router.on("user.created", Arc::new(LogEffect::with_prefix("user")));
-    router.on("user.updated", Arc::new(LogEffect::with_prefix("user")));
-    router.on("user.deleted", Arc::new(LogEffect::with_prefix("user")));
+    router.on("user.*", Arc::new(LogEffect::with_prefix("user")));
 
     // Game events
-    router.on("game.started", Arc::new(LogEffect::with_prefix("game")));
-    router.on("game.ended", Arc::new(LogEffect::with_prefix("game")));
-    router.on("game.achievement", Arc::new(LogEffect::with_prefix("game")));
-    router.on("player.joined", Arc::new(LogEffect::with_prefix("game")));
-    router.on("player.left", Arc::new(LogEffect::with_prefix("game")));
+    router.on("game.*", Arc::new(LogEffect::with_prefix("game")));
+    router.on("player.*", Arc::new(LogEffect::with_prefix("game")));
 
     // System events
-    router.on("system.health", Arc::new(LogEffect::with_prefix("system")));
-    router.on("system.alert", Arc::new(LogEffect::with_prefix("system")));
-
-    // Example: Add webhook for specific events (uncomment when needed)
-    // use synapse::effects::WebhookEffect;
-    // if let Ok(discord_url) = env::var("DISCORD_WEBHOOK_URL") {
-    //     router.on("game.achievement", Arc::new(WebhookEffect::new(discord_url)));
-    // }
+    router.on("system.*", Arc::new(LogEffect::with_prefix("system")));
 
     info!(
         handler_count = router.handler_count(),
         event_types = ?router.event_types(),
-        "Router configured"
+        "Router configured with defaults"
     );
 
     router
@@ -98,6 +101,8 @@ fn parse_event(map: &HashMap<String, RedisValue>) -> Option<Event> {
     let source = get_str_field(map, "source");
     let event_type = get_str_field(map, "eventType");
     let payload_str = get_str_field(map, "payload");
+    let timestamp = get_optional_str_field(map, "timestamp");
+    let correlation_id = get_optional_str_field(map, "correlationId");
 
     if source == "unknown" || event_type == "unknown" {
         warn!("Event missing required fields");
@@ -117,6 +122,8 @@ fn parse_event(map: &HashMap<String, RedisValue>) -> Option<Event> {
         source,
         event_type,
         payload,
+        timestamp,
+        correlation_id,
     })
 }
 
@@ -131,6 +138,20 @@ fn get_str_field(map: &HashMap<String, RedisValue>, key: &str) -> String {
     } else {
         "unknown".to_string()
     }
+}
+
+/// Extract an optional string field from Redis stream data.
+fn get_optional_str_field(map: &HashMap<String, RedisValue>, key: &str) -> Option<String> {
+    map.get(key).and_then(|val| match val {
+        RedisValue::BulkString(bytes) => {
+            let s = String::from_utf8_lossy(bytes).to_string();
+            if s.is_empty() { None } else { Some(s) }
+        }
+        RedisValue::SimpleString(s) => {
+            if s.is_empty() { None } else { Some(s.clone()) }
+        }
+        _ => None,
+    })
 }
 
 #[tokio::main]

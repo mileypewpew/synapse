@@ -92,11 +92,7 @@ mod tests {
     #[tokio::test]
     async fn test_log_effect() {
         let effect = LogEffect::new();
-        let event = Event {
-            source: "test".to_string(),
-            event_type: "user.created".to_string(),
-            payload: json!({"user_id": 123}),
-        };
+        let event = Event::new("test", "user.created", json!({"user_id": 123}));
 
         let result = effect.execute(&event).await.unwrap();
         assert_eq!(result.effect_name, "log");
@@ -107,11 +103,7 @@ mod tests {
     #[tokio::test]
     async fn test_log_effect_with_prefix() {
         let effect = LogEffect::with_prefix("audit");
-        let event = Event {
-            source: "admin".to_string(),
-            event_type: "user.deleted".to_string(),
-            payload: json!({}),
-        };
+        let event = Event::new("admin", "user.deleted", json!({}));
 
         let result = effect.execute(&event).await.unwrap();
         assert!(result.message.contains("audit"));

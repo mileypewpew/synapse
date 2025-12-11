@@ -21,3 +21,8 @@ async-trait = "0.1"
 reqwest = { version = "0.12", features = ["json"] }
 hostname = "0.4"
 thiserror = "2.0"
+
+# Sprint 5: Configuration & Discord
+toml = "0.8"
+regex = "1.11"
+chrono = { version = "0.4", features = ["serde"] }

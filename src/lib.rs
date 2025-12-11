@@ -16,12 +16,15 @@
 //! - [`event`]: Core event types shared across server and worker
 //! - [`router`]: Event routing and dispatch logic
 //! - [`effects`]: Effect trait and built-in effect handlers
+//! - [`config`]: Configuration loading and validation
 
+pub mod config;
 pub mod event;
 pub mod router;
 pub mod effects;
 
 // Re-export commonly used types at crate root
+pub use config::SynapseConfig;
 pub use event::Event;
 pub use router::Router;
 pub use effects::{Effect, EffectResult, EffectError};
