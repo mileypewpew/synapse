@@ -8,6 +8,7 @@ use axum::{
 };
 use deadpool_redis::{Config, Pool, Runtime};
 use deadpool_redis::redis::cmd;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
 use std::net::SocketAddr;
@@ -22,6 +23,15 @@ use synapse::EVENT_STREAM_NAME;
 struct AppState {
     redis_pool: Pool,
     api_key: String,
+}
+
+/// Response returned when an event is successfully accepted.
+#[derive(Debug, Serialize, Deserialize)]
+struct EventResponse {
+    /// Redis stream ID assigned to the event
+    id: String,
+    /// Status of the request
+    status: String,
 }
 
 #[tokio::main]
@@ -112,29 +122,23 @@ async fn health_check(State(state): State<Arc<AppState>>) -> Result<Json<Value>,
 async fn emit_event(
     State(state): State<Arc<AppState>>,
     Json(event): Json<Event>,
-) -> StatusCode {
+) -> Result<(StatusCode, Json<EventResponse>), StatusCode> {
     debug!("Received event: {:?}", event);
 
     // Get connection from pool
-    let mut conn = match state.redis_pool.get().await {
-        Ok(conn) => conn,
-        Err(e) => {
-            error!("Failed to get Redis connection: {}", e);
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
+    let mut conn = state.redis_pool.get().await.map_err(|e| {
+        error!("Failed to get Redis connection: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Serialize payload for storage
-    let payload_str = match serde_json::to_string(&event.payload) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Failed to serialize payload: {}", e);
-            return StatusCode::BAD_REQUEST;
-        }
-    };
+    let payload_str = serde_json::to_string(&event.payload).map_err(|e| {
+        error!("Failed to serialize payload: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Push to Redis Stream (XADD)
-    let result: Result<String, _> = cmd("XADD")
+    let id: String = cmd("XADD")
         .arg(EVENT_STREAM_NAME)
         .arg("*") // Auto-generate ID
         .arg("source")
@@ -144,16 +148,19 @@ async fn emit_event(
         .arg("payload")
         .arg(payload_str)
         .query_async(&mut conn)
-        .await;
-
-    match result {
-        Ok(id) => {
-            info!("Event emitted: {}/{} -> ID: {}", event.source, event.event_type, id);
-            StatusCode::ACCEPTED
-        }
-        Err(e) => {
+        .await
+        .map_err(|e| {
             error!("Failed to push event to Redis Stream: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
-        }
-    }
+        })?;
+
+    info!("Event emitted: {}/{} -> ID: {}", event.source, event.event_type, id);
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(EventResponse {
+            id,
+            status: "accepted".to_string(),
+        }),
+    ))
 }
