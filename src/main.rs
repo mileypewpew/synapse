@@ -8,28 +8,20 @@ use axum::{
 };
 use deadpool_redis::{Config, Pool, Runtime};
 use deadpool_redis::redis::cmd;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{info, error, debug, warn};
 
-// Stream key for Synapse events
-const EVENT_STREAM_NAME: &str = "synapse:events";
+// Import from the synapse library
+use synapse::event::Event;
+use synapse::EVENT_STREAM_NAME;
 
 #[derive(Clone)]
 struct AppState {
     redis_pool: Pool,
     api_key: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Event {
-    pub source: String,
-    #[serde(rename = "eventType")]
-    pub event_type: String,
-    pub payload: Value,
 }
 
 #[tokio::main]
