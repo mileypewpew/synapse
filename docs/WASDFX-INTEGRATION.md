@@ -48,7 +48,7 @@ Synapse sends payloads matching this structure:
   "title": "Steve unlocked an achievement!",
   "content": "**Steve** unlocked **Diamonds**!",
   "iconType": "achievement",
-  "serverId": "cmi55214n0000oykqes3x5u27",
+  "serverSlug": "haumcraft-season-vi",
   "category": "game",
   "priority": 0,
   "metadata": {
@@ -158,13 +158,19 @@ API_KEYS=sk_test_dev_key
 # API_KEYS=sk_prod_<random-32-bytes-hex>
 ```
 
-### Server ID
+### Server Slug
 
-Synapse is configured with a specific `serverId` to associate events with. This must be a valid server ID from the WASDFX database:
+Synapse is configured with a `serverSlug` to associate events with. This is a human-readable identifier that WASDFX resolves to the server ID internally:
 
+```bash
+# In Synapse's .env file:
+WASDFX_SERVER_SLUG=haumcraft-season-vi
+```
+
+Available slugs can be found in the database:
 ```sql
-SELECT id, name, slug FROM servers;
--- Example: cmi55214n0000oykqes3x5u27 | Haumcraft Season VI | haumcraft-season-vi
+SELECT slug, name FROM servers;
+-- Example: haumcraft-season-vi | Haumcraft Season VI
 ```
 
 ---
@@ -235,12 +241,6 @@ Consider implementing rate limiting on the WASDFX API if high event volume becom
 For high-throughput scenarios, a batch endpoint could be more efficient:
 ```
 POST /api/v1/events/emit/batch
-```
-
-### 4. Server Slug Support
-Currently requires database ID. A slug-based lookup would be more user-friendly:
-```json
-{ "serverSlug": "haumcraft-season-vi" }
 ```
 
 ---

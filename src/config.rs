@@ -186,8 +186,9 @@ pub struct WasdfxEffectConfig {
     #[serde(default)]
     pub api_key: String,
 
+    /// Human-readable server slug (e.g., "haumcraft-season-vi")
     #[serde(default)]
-    pub server_id: Option<String>,
+    pub server_slug: Option<String>,
 
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
@@ -262,8 +263,8 @@ impl SynapseConfig {
                 .with_timeout(Duration::from_millis(config.timeout_ms))
                 .with_api_key(&config.api_key);
 
-            if let Some(ref server_id) = config.server_id {
-                effect = effect.with_server_id(server_id);
+            if let Some(ref server_slug) = config.server_slug {
+                effect = effect.with_server_slug(server_slug);
             }
 
             wasdfx_effects.insert(name.clone(), Arc::new(effect));

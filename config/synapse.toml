@@ -21,8 +21,8 @@ consumer_group = "synapse_workers"
 [routes]
 "user.created" = ["log:user"]
 "user.*" = ["log:user"]
-"game.*" = ["log:game", "webhook:discord"]
-"player.*" = ["log:game"]
+"game.*" = ["log:game", "webhook:discord", "wasdfx:activity"]
+"player.*" = ["log:game", "wasdfx:activity"]
 "system.alert" = ["log:system", "webhook:discord"]
 "*" = ["log:default"]
 
@@ -46,3 +46,11 @@ url = "${DISCORD_WEBHOOK_URL}"
 timeout_ms = 10000
 retries = 2
 format = "discord"
+
+# WASDFX Activity Feed integration
+# Posts game events to the WASDFX Activity Feed API
+[effects.wasdfx.activity]
+url = "${WASDFX_API_URL}"
+api_key = "${WASDFX_API_KEY}"
+server_slug = "${WASDFX_SERVER_SLUG}"  # Human-readable, e.g. "haumcraft-season-vi"
+timeout_ms = 10000

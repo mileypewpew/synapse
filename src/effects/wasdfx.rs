@@ -10,7 +10,7 @@
 //!
 //! let effect = WasdfxEffect::new("http://localhost:4000/api/v1/events/emit")
 //!     .with_api_key("sk_test_dev_key")
-//!     .with_server_id("haumcraft");
+//!     .with_server_slug("haumcraft-season-vi");
 //! ```
 
 use super::{Effect, EffectError, EffectResult};
@@ -143,8 +143,8 @@ pub struct WasdfxEffect {
     /// API key for authentication
     api_key: String,
 
-    /// Default server ID for events
-    server_id: Option<String>,
+    /// Server slug for events (e.g., "haumcraft-season-vi")
+    server_slug: Option<String>,
 
     /// HTTP client
     client: Client,
@@ -159,7 +159,7 @@ impl WasdfxEffect {
         Self {
             url: url.into(),
             api_key: String::new(),
-            server_id: None,
+            server_slug: None,
             client: Client::new(),
             timeout: DEFAULT_TIMEOUT,
         }
@@ -171,9 +171,9 @@ impl WasdfxEffect {
         self
     }
 
-    /// Set the default server ID
-    pub fn with_server_id(mut self, server_id: impl Into<String>) -> Self {
-        self.server_id = Some(server_id.into());
+    /// Set the server slug (e.g., "haumcraft-season-vi")
+    pub fn with_server_slug(mut self, server_slug: impl Into<String>) -> Self {
+        self.server_slug = Some(server_slug.into());
         self
     }
 
@@ -203,7 +203,7 @@ impl WasdfxEffect {
             "title": title,
             "content": content,
             "iconType": icon_type,
-            "serverId": self.server_id,
+            "serverSlug": self.server_slug,
             "category": "game",
             "priority": 0,
             "metadata": metadata,
@@ -329,7 +329,7 @@ mod tests {
     fn test_transform_event() {
         let effect = WasdfxEffect::new("http://localhost:4000/api/v1/events/emit")
             .with_api_key("test-key")
-            .with_server_id("haumcraft");
+            .with_server_slug("haumcraft-season-vi");
 
         let event = Event::new(
             "minecraft",
@@ -341,7 +341,7 @@ mod tests {
 
         assert_eq!(transformed["type"], "ACHIEVEMENT_UNLOCKED");
         assert_eq!(transformed["iconType"], "achievement");
-        assert_eq!(transformed["serverId"], "haumcraft");
+        assert_eq!(transformed["serverSlug"], "haumcraft-season-vi");
         assert!(transformed["title"].as_str().unwrap().contains("Steve"));
     }
 }
