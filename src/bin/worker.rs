@@ -476,7 +476,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Periodic stats (every 100 events)
-        if events_processed > 0 && events_processed.is_multiple_of(100) {
+        if events_processed > 0 && events_processed % 100 == 0 {
             info!(
                 events_processed = events_processed,
                 events_failed = events_failed,

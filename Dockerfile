@@ -4,7 +4,7 @@ FROM rust:1.83-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static
 
 # Copy dependency files first for caching
 COPY Cargo.toml Cargo.lock ./
@@ -32,8 +32,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# Install runtime dependencies (ssl certificates)
-RUN apk add --no-cache ca-certificates tzdata
+# Install runtime dependencies (ssl certificates, wget for healthcheck)
+RUN apk add --no-cache ca-certificates tzdata wget
 
 # Copy binaries from builder
 COPY --from=builder /app/target/release/synapse /app/server

@@ -1,0 +1,57 @@
+services:
+  synapse-server:
+    build: .
+    container_name: synapse-server
+    command: /app/server
+    restart: unless-stopped
+    ports:
+      - "4001:3000"
+    environment:
+      - REDIS_URL=${REDIS_URL}
+      - SYNAPSE_API_KEY=${SYNAPSE_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - WASDFX_API_URL=${WASDFX_API_URL}
+      - WASDFX_API_KEY=${WASDFX_API_KEY}
+      - WASDFX_SERVER_SLUG=${WASDFX_SERVER_SLUG}
+      - SYNAPSE_WORKER_NAME=server
+      - RUST_LOG=info
+    volumes:
+      - ./config:/app/config:ro
+    networks:
+      - wasdfx-network
+      - poa-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  synapse-worker:
+    build: .
+    container_name: synapse-worker
+    command: /app/worker
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=${REDIS_URL}
+      - SYNAPSE_API_KEY=${SYNAPSE_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - WASDFX_API_URL=${WASDFX_API_URL}
+      - WASDFX_API_KEY=${WASDFX_API_KEY}
+      - WASDFX_SERVER_SLUG=${WASDFX_SERVER_SLUG}
+      - SYNAPSE_WORKER_NAME=worker-1
+      - RUST_LOG=info
+    volumes:
+      - ./config:/app/config:ro
+    networks:
+      - wasdfx-network
+      - poa-network
+    depends_on:
+      synapse-server:
+        condition: service_healthy
+
+networks:
+  wasdfx-network:
+    external: true
+  poa-network:
+    external:
+      name: poa-eventbus_poa-network
