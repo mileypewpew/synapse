@@ -190,6 +190,14 @@ impl WasdfxEffect {
         let title = format_title(&event.event_type, &event.payload);
         let content = format_content(&event.event_type, &event.payload);
 
+        // Event payload can override configured server_slug
+        // This allows different event sources to specify their own server context
+        let server_slug = event.payload.get("serverSlug")
+            .or_else(|| event.payload.get("server_slug"))
+            .and_then(|v| v.as_str())
+            .map(|s| json!(s))
+            .unwrap_or_else(|| json!(self.server_slug));
+
         // Build metadata from original event
         let metadata = json!({
             "synapse_source": event.source,
@@ -203,7 +211,7 @@ impl WasdfxEffect {
             "title": title,
             "content": content,
             "iconType": icon_type,
-            "serverSlug": self.server_slug,
+            "serverSlug": server_slug,
             "category": "game",
             "priority": 0,
             "metadata": metadata,
@@ -343,5 +351,41 @@ mod tests {
         assert_eq!(transformed["iconType"], "achievement");
         assert_eq!(transformed["serverSlug"], "haumcraft-season-vi");
         assert!(transformed["title"].as_str().unwrap().contains("Steve"));
+    }
+
+    #[test]
+    fn test_transform_event_with_payload_server_slug() {
+        let effect = WasdfxEffect::new("http://localhost:4000/api/v1/events/emit")
+            .with_api_key("test-key")
+            .with_server_slug("default-server");
+
+        // Event payload overrides configured server_slug
+        let event = Event::new(
+            "valheim",
+            "player.joined",
+            json!({"player": "Viking", "serverSlug": "valhalla-server"})
+        );
+
+        let transformed = effect.transform_event(&event);
+
+        assert_eq!(transformed["serverSlug"], "valhalla-server");
+    }
+
+    #[test]
+    fn test_transform_event_with_snake_case_server_slug() {
+        let effect = WasdfxEffect::new("http://localhost:4000/api/v1/events/emit")
+            .with_api_key("test-key")
+            .with_server_slug("default-server");
+
+        // Also supports snake_case
+        let event = Event::new(
+            "satisfactory",
+            "player.joined",
+            json!({"player": "Engineer", "server_slug": "ficsit-factory"})
+        );
+
+        let transformed = effect.transform_event(&event);
+
+        assert_eq!(transformed["serverSlug"], "ficsit-factory");
     }
 }
