@@ -190,13 +190,9 @@ impl WasdfxEffect {
         let title = format_title(&event.event_type, &event.payload);
         let content = format_content(&event.event_type, &event.payload);
 
-        // Event payload can override configured server_slug
-        // This allows different event sources to specify their own server context
-        let server_slug = event.payload.get("serverSlug")
-            .or_else(|| event.payload.get("server_slug"))
-            .and_then(|v| v.as_str())
-            .map(|s| json!(s))
-            .unwrap_or_else(|| json!(self.server_slug));
+        // Use configured server_slug only - do not allow payload override
+        // This ensures events are always tagged with correct server context
+        let server_slug = json!(self.server_slug);
 
         // Build metadata from original event
         let metadata = json!({
